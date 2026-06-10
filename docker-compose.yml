@@ -1,0 +1,51 @@
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT}:80"
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ConnectionStrings__DefaultConnection: "Server=${DB_HOST};Port=${DB_PORT};Database=${DB_NAME};Uid=root;Pwd=${DB_ROOT_PASSWORD};"
+      RedisConnection: "${REDIS_HOST}:${REDIS_PORT}"
+    depends_on:
+      mysql_db:
+        condition: service_healthy
+      redis_cache:
+        condition: service_healthy
+
+  mysql_db:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis_cache:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  mysql_data:
