@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# Global Environment Variables to optimize runners
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -25,7 +24,6 @@ jobs:
       with:
         dotnet-version: '8.0.x'
 
-    # Using wildcard checks to ensure compilation targets are caught regardless of path case sensitivity
     - name: Restore Dependencies
       run: |
         cd backend || cd Backend || exit 1
@@ -55,7 +53,6 @@ jobs:
       with:
         node-version: '24'
 
-    # Navigates to directory structurally to prevent cache mapping route errors
     - name: Install Frontend Dependencies
       run: |
         cd frontend || cd Frontend || exit 1
@@ -79,21 +76,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-backend, build-frontend]
 
-    # Provide fallback environment variables specifically for the runner environment
-    env:
-      FRONTEND_PORT: 3000
-      BACKEND_PORT: 5000
-      ASPNETCORE_ENVIRONMENT: Development
-      DB_HOST: mysql_db
-      DB_PORT: 3306
-      DB_NAME: app_db
-      DB_ROOT_PASSWORD: CI_Test_Password_2026!
-      REDIS_HOST: redis_cache
-      REDIS_PORT: 6379
-
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
+
+    # This creates a dummy .env file right in the runner root directory so docker compose can inject values
+    - name: Generate Dummy Environment File for Parsing
+      run: |
+        echo "FRONTEND_PORT=3000" >> .env
+        echo "BACKEND_PORT=5000" >> .env
+        echo "ASPNETCORE_ENVIRONMENT=Development" >> .env
+        echo "DB_HOST=mysql_db" >> .env
+        echo "DB_PORT=3306" >> .env
+        echo "DB_NAME=app_db" >> .env
+        echo "DB_ROOT_PASSWORD=CI_Sandbox_Password_2026!" >> .env
+        echo "REDIS_HOST=redis_cache" >> .env
+        echo "REDIS_PORT=6379" >> .env
 
     - name: Validate Compose File Syntax
       run: docker compose config
