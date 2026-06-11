@@ -1,0 +1,100 @@
+name: Production Secure CD to AWS ECS
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECS_CLUSTER: prod-gatherly-cluster            # Your ECS Cluster Name
+  BACKEND_SERVICE: backend-service               # Your ECS Backend Service Name
+  FRONTEND_SERVICE: frontend-service             # Your ECS Frontend Service Name
+  BACKEND_ECR_REPO: gatherly-backend             # Your Backend ECR Repository Name
+  FRONTEND_ECR_REPO: gatherly-frontend           # Your Frontend ECR Repository Name
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  deploy:
+    name: Build, Secure, and Deploy to ECS
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Source Code
+      uses: actions/checkout@v4
+
+    # 1. Standardize Directory Traversal Names for Case-Sensitive Linux Runners
+    - name: Standardize Case Sensitivity Paths
+      run: |
+        if [ -d "Backend" ]; then mv Backend backend; fi
+        if [ -d "Frontend" ]; then mv Frontend frontend; fi
+
+    # 2. Authenticate Cloud Access securely
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    # 3. Log into AWS Private ECR
+    - name: Log in to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    # 4. Build and Securely Push Frontend and Backend Container Images
+    - name: Build, Tag, and Push Images to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        # Build & Push Backend
+        cd backend
+        docker build -t $ECR_REGISTRY/$BACKEND_ECR_REPO:$IMAGE_TAG -t $ECR_REGISTRY/$BACKEND_ECR_REPO:latest .
+        docker push $ECR_REGISTRY/$BACKEND_ECR_REPO --all-tags
+        cd ..
+
+        # Build & Push Frontend (Injecting Production Domain Load Balancer Target URL)
+        cd frontend
+        docker build -t $ECR_REGISTRY/$FRONTEND_ECR_REPO:$IMAGE_TAG -t $ECR_REGISTRY/$FRONTEND_ECR_REPO:latest \
+          --build-arg VITE_API_URL=https://api.yourproductiondomain.com .
+        docker push $ECR_REGISTRY/$FRONTEND_ECR_REPO --all-tags
+
+    # 5. Fetch Active Task Definitions From Cloud Registry
+    - name: Download Active Task Definitions
+      run: |
+        aws ecs describe-task-definition --task-definition ${{ env.BACKEND_SERVICE }} --query taskDefinition > task-def-backend.json
+        aws ecs describe-task-definition --task-definition ${{ env.FRONTEND_SERVICE }} --query taskDefinition > task-def-frontend.json
+
+    # 6. Inject the New Cryptographic Image Tags into the Task Layouts
+    - name: Render Backend Task Definition
+      id: render-backend
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
+      with:
+        task-definition: task-def-backend.json
+        container-name: backend-container
+        image: ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPO }}:${{ github.sha }}
+
+    - name: Render Frontend Task Definition
+      id: render-frontend
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
+      with:
+        task-definition: task-def-frontend.json
+        container-name: frontend-container
+        image: ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_ECR_REPO }}:${{ github.sha }}
+
+    # 7. Execute Rolling Zero-Downtime Blue/Green Upgrade Steps
+    - name: Deploy Backend to Amazon ECS
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      with:
+        task-definition: ${{ steps.render-backend.outputs.task-definition }}
+        service: ${{ env.BACKEND_SERVICE }}
+        cluster: ${{ env.ECS_CLUSTER }}
+        wait-for-service-stability: true
+
+    - name: Deploy Frontend to Amazon ECS
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      with:
+        task-definition: ${{ steps.render-frontend.outputs.task-definition }}
+        service: ${{ env.FRONTEND_SERVICE }}
+        cluster: ${{ env.ECS_CLUSTER }}
+        wait-for-service-stability: true
