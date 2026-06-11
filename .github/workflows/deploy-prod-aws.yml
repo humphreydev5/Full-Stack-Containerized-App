@@ -93,3 +93,31 @@ jobs:
         service: ${{ env.FRONTEND_SERVICE }}
         cluster: ${{ env.ECS_CLUSTER }}
         wait-for-service-stability: true
+
+     # NEW STEP: Dynamically fetch active AWS Account ID to prevent mismatch errors
+    - name: Get AWS Account ID
+      id: get-account
+      run: |
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        echo "ACCOUNT_ID=$ACCOUNT_ID" >> $GITHUB_ENV
+
+    - name: Inject Active Account ID Into Task Layouts
+      run: |
+        sed -i "s/\${AWS_ACCOUNT_ID}/${{ env.ACCOUNT_ID }}/g" task-def-backend.json
+        sed -i "s/\${AWS_ACCOUNT_ID}/${{ env.ACCOUNT_ID }}/g" task-def-frontend.json
+
+    - name: Render Backend Task Definition
+      id: render-backend
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
+      with:
+        task-definition: task-def-backend.json
+        container-name: backend-container
+        image: ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPO }}:${{ github.sha }}
+
+    - name: Render Frontend Task Definition
+      id: render-frontend
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
+      with:
+        task-definition: task-def-frontend.json
+        container-name: frontend-container
+        image: ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_ECR_REPO }}:${{ github.sha }}    
