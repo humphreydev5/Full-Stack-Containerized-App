@@ -59,20 +59,26 @@ jobs:
           --build-arg VITE_API_URL=https://api.yourproductiondomain.com .
         docker push $ECR_REGISTRY/$FRONTEND_ECR_REPO --all-tags
 
-    # 5. Fetch Active Task Definitions From Cloud Registry
-    - name: Download Active Task Definitions
-      run: |
-        aws ecs describe-task-definition --task-definition ${{ env.BACKEND_SERVICE }} --query taskDefinition > task-def-backend.json
-        aws ecs describe-task-definition --task-definition ${{ env.FRONTEND_SERVICE }} --query taskDefinition > task-def-frontend.json
+    # 5. REMOVED: "Download Active Task Definitions" step is no longer needed!
 
-    # 6. Inject the New Cryptographic Image Tags into the Task Layouts
+    # 6. Inject the New Cryptographic Image Tags directly into your repository layout files
+     Alexander-
     - name: Render Backend Task Definition
       id: render-backend
       uses: aws-actions/amazon-ecs-render-task-definition@v1
       with:
-        task-definition: task-def-backend.json
+        task-definition: task-def-backend.json       # Points straight to your repo file
         container-name: backend-container
         image: ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPO }}:${{ github.sha }}
+
+     Taras-
+    - name: Render Frontend Task Definition
+      id: render-frontend
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
+      with:
+        task-definition: task-def-frontend.json      # Points straight to your repo file
+        container-name: frontend-container
+        image: ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_ECR_REPO }}:${{ github.sha }}
 
     - name: Render Frontend Task Definition
       id: render-frontend
