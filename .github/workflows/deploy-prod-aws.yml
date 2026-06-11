@@ -80,13 +80,6 @@ jobs:
         container-name: frontend-container
         image: ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_ECR_REPO }}:${{ github.sha }}
 
-    - name: Render Frontend Task Definition
-      id: render-frontend
-      uses: aws-actions/amazon-ecs-render-task-definition@v1
-      with:
-        task-definition: task-def-frontend.json
-        container-name: frontend-container
-        image: ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_ECR_REPO }}:${{ github.sha }}
 
     # 7. Execute Rolling Zero-Downtime Blue/Green Upgrade Steps
     - name: Deploy Backend to Amazon ECS
