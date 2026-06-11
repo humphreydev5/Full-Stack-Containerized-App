@@ -70,7 +70,7 @@ jobs:
           --build-arg VITE_API_URL=http://localhost:5000 \
           .
 
-  # --- ORCHESTRATION VERIFICATION JOB ---
+# --- ORCHESTRATION VERIFICATION JOB ---
   verify-orchestration:
     name: Verify Docker Compose Architecture
     runs-on: ubuntu-latest
@@ -80,30 +80,19 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # Diagnostic Step: Prints out repository file structure to instantly catch case-sensitivity issues
-    - name: Debug File System Structure
-      run: |
-        echo "=== Current Working Directory Listing ==="
-        ls -la
-        
-    # Standardizing directories to lowercase to guarantee docker-compose context matches perfectly
     - name: Standardize Case Sensitivity Paths
       run: |
         if [ -d "Backend" ]; then mv Backend backend; fi
         if [ -d "Frontend" ]; then mv Frontend frontend; fi
 
-    # Injecting environment parameters natively inside the execution runtime step shell block
+    # Secure Validation: Secrets are masked in logs and injected straight to memory contexts
     - name: Validate Compose Configuration
       env:
-        FRONTEND_PORT: 3000
-        BACKEND_PORT: 5000
+        DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+        DB_NAME: ${{ secrets.DB_NAME }}
         ASPNETCORE_ENVIRONMENT: Development
         DB_HOST: mysql_db
-        DB_PORT: 3306
-        DB_NAME: app_db
-        DB_ROOT_PASSWORD: CI_Sandbox_Password_2026!
         REDIS_HOST: redis_cache
-        REDIS_PORT: 6379
       run: |
         docker compose config
         docker compose build
