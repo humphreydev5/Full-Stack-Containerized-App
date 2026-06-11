@@ -59,27 +59,23 @@ jobs:
           --build-arg VITE_API_URL=https://api.yourproductiondomain.com .
         docker push $ECR_REGISTRY/$FRONTEND_ECR_REPO --all-tags
 
-    # 5. REMOVED: "Download Active Task Definitions" step is no longer needed!
-
-    # 6. Inject the New Cryptographic Image Tags directly into your repository layout files
-     Alexander-
+   # 5. Render Backend Task Definition
     - name: Render Backend Task Definition
       id: render-backend
       uses: aws-actions/amazon-ecs-render-task-definition@v1
       with:
-        task-definition: task-def-backend.json       # Points straight to your repo file
+        task-definition: task-def-backend.json
         container-name: backend-container
         image: ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPO }}:${{ github.sha }}
 
-     Taras-
+    # 6. Render Frontend Task Definition
     - name: Render Frontend Task Definition
       id: render-frontend
       uses: aws-actions/amazon-ecs-render-task-definition@v1
       with:
-        task-definition: task-def-frontend.json      # Points straight to your repo file
+        task-definition: task-def-frontend.json
         container-name: frontend-container
         image: ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_ECR_REPO }}:${{ github.sha }}
-
 
     # 7. Execute Rolling Zero-Downtime Blue/Green Upgrade Steps
     - name: Deploy Backend to Amazon ECS
