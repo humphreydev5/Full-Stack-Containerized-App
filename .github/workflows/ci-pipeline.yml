@@ -69,8 +69,8 @@ jobs:
         docker build -t frontend-test:latest \
           --build-arg VITE_API_URL=http://localhost:5000 \
           .
-
-  # --- ORCHESTRATION VERIFICATION JOB ---
+          
+# --- ORCHESTRATION VERIFICATION JOB ---
   verify-orchestration:
     name: Verify Docker Compose Architecture
     runs-on: ubuntu-latest
@@ -80,10 +80,10 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # Using raw heredoc prevents character escaping or formatting errors on the runner
+    # Using raw heredoc to create the environment file in the current working workspace
     - name: Generate Dummy Environment File for Parsing
       run: |
-        cat << 'EOF' > .env
+        cat << 'EOF' > ./vars.env
         FRONTEND_PORT=3000
         BACKEND_PORT=5000
         ASPNETCORE_ENVIRONMENT=Development
@@ -95,8 +95,9 @@ jobs:
         REDIS_PORT=6379
         EOF
 
+    # Explicitly pass the generated configuration via the --env-file flag
     - name: Validate Compose File Syntax
-      run: docker compose config
+      run: docker compose --env-file ./vars.env config
 
     - name: Build Stack Using Compose
-      run: docker compose build
+      run: docker compose --env-file ./vars.env build
