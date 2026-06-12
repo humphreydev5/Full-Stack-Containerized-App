@@ -11,7 +11,6 @@ env:
   FRONTEND_SERVICE: frontend-service
   BACKEND_ECR_REPO: gatherly-backend
   FRONTEND_ECR_REPO: gatherly-frontend
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   deploy:
@@ -19,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Checkout Source Code
+    # 1. Checkout Source Code (Upgraded to v4 to ensure latest sub-dependencies)
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
@@ -29,9 +28,9 @@ jobs:
         if [ -d "Backend" ]; then mv Backend backend; fi
         if [ -d "Frontend" ]; then mv Frontend frontend; fi
 
-    # 3. Authenticate with AWS securely via GitHub Secrets
+    # 3. Authenticate with AWS securely via GitHub Secrets (Upgraded to v5 for native Node 24 support)
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
+      uses: aws-actions/configure-aws-credentials@v5
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -48,13 +47,11 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        # Navigate, compile, and push backend container layers
         cd backend
         docker build -t $ECR_REGISTRY/$BACKEND_ECR_REPO:$IMAGE_TAG -t $ECR_REGISTRY/$BACKEND_ECR_REPO:latest .
         docker push $ECR_REGISTRY/$BACKEND_ECR_REPO --all-tags
         cd ..
 
-        # Navigate, inject api gateway endpoint, compile, and push frontend container layers
         cd frontend
         docker build -t $ECR_REGISTRY/$FRONTEND_ECR_REPO:$IMAGE_TAG -t $ECR_REGISTRY/$FRONTEND_ECR_REPO:latest \
           --build-arg VITE_API_URL=https://api.yourproductiondomain.com .
