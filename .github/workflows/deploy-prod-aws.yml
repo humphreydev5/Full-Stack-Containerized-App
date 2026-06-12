@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Checkout Source Code (Upgraded to v4 to ensure latest sub-dependencies)
+    # 1. Checkout Source Code
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
@@ -28,7 +28,7 @@ jobs:
         if [ -d "Backend" ]; then mv Backend backend; fi
         if [ -d "Frontend" ]; then mv Frontend frontend; fi
 
-    # 3. Authenticate with AWS securely via GitHub Secrets (Upgraded to v5 for native Node 24 support)
+    # 3. Authenticate with AWS securely via GitHub Secrets
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v5
       with:
@@ -47,11 +47,13 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
       run: |
+        # Navigate, compile, and push backend container layers
         cd backend
         docker build -t $ECR_REGISTRY/$BACKEND_ECR_REPO:$IMAGE_TAG -t $ECR_REGISTRY/$BACKEND_ECR_REPO:latest .
         docker push $ECR_REGISTRY/$BACKEND_ECR_REPO --all-tags
         cd ..
 
+        # Navigate, inject api gateway endpoint, compile, and push frontend container layers
         cd frontend
         docker build -t $ECR_REGISTRY/$FRONTEND_ECR_REPO:$IMAGE_TAG -t $ECR_REGISTRY/$FRONTEND_ECR_REPO:latest \
           --build-arg VITE_API_URL=https://api.yourproductiondomain.com .
@@ -64,19 +66,19 @@ jobs:
         ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
         echo "ACCOUNT_ID=$ACCOUNT_ID" >> $GITHUB_ENV
 
-# 7. Substitute placeholders inside your infrastructure task templates
+    # 7. Substitute placeholders inside your infrastructure task templates
     - name: Inject Active Account ID Into Task Layouts
       run: |
         sed -i "s/\${AWS_ACCOUNT_ID}/${{ env.ACCOUNT_ID }}/g" task-def-backend.json
         sed -i "s/\${AWS_ACCOUNT_ID}/${{ env.ACCOUNT_ID }}/g" task-def-frontend.json
 
-    # NEW STEP: Automatically provision CloudWatch log groups if they are missing
+    # 8. Pre-Provision CloudWatch Log Groups to prevent Fargate boot errors
     - name: Pre-Provision CloudWatch Log Streams
       run: |
         aws logs create-log-group --log-group-name /ecs/backend-service || true
         aws logs create-log-group --log-group-name /ecs/frontend-service || true
 
-    # 8. Render the new cryptographic ECR Image Tags into the Backend definition template
+    # 9. Render the new cryptographic ECR Image Tags into the Backend definition template
     - name: Render Backend Task Definition
       id: render-backend
       uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -85,7 +87,7 @@ jobs:
         container-name: backend-container
         image: ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPO }}:${{ github.sha }}
 
-    # 9. Render the new cryptographic ECR Image Tags into the Frontend definition template
+    # 10. Render the new cryptographic ECR Image Tags into the Frontend definition template
     - name: Render Frontend Task Definition
       id: render-frontend
       uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -94,20 +96,20 @@ jobs:
         container-name: frontend-container
         image: ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_ECR_REPO }}:${{ github.sha }}
 
-    # 10. Execute rolling Zero-Downtime Blue/Green Upgrade for the Backend Service
+    # 11. Execute rolling Upgrade for the Backend Service
     - name: Deploy Backend to Amazon ECS
       uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       with:
         task-definition: ${{ steps.render-backend.outputs.task-definition }}
         service: ${{ env.BACKEND_SERVICE }}
         cluster: ${{ env.ECS_CLUSTER }}
-        wait-for-service-stability: true
+        wait-for-service-stability: false
 
-    # 11. Execute rolling Zero-Downtime Blue/Green Upgrade for the Frontend Service
+    # 12. Execute rolling Upgrade for the Frontend Service
     - name: Deploy Frontend to Amazon ECS
       uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       with:
         task-definition: ${{ steps.render-frontend.outputs.task-definition }}
         service: ${{ env.FRONTEND_SERVICE }}
         cluster: ${{ env.ECS_CLUSTER }}
-        wait-for-service-stability: true
+        wait-for-service-stability: false
