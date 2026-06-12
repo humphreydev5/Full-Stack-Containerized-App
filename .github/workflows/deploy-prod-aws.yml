@@ -64,11 +64,17 @@ jobs:
         ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
         echo "ACCOUNT_ID=$ACCOUNT_ID" >> $GITHUB_ENV
 
-    # 7. Substitute placeholders inside your infrastructure task templates
+# 7. Substitute placeholders inside your infrastructure task templates
     - name: Inject Active Account ID Into Task Layouts
       run: |
         sed -i "s/\${AWS_ACCOUNT_ID}/${{ env.ACCOUNT_ID }}/g" task-def-backend.json
         sed -i "s/\${AWS_ACCOUNT_ID}/${{ env.ACCOUNT_ID }}/g" task-def-frontend.json
+
+    # NEW STEP: Automatically provision CloudWatch log groups if they are missing
+    - name: Pre-Provision CloudWatch Log Streams
+      run: |
+        aws logs create-log-group --log-group-name /ecs/backend-service || true
+        aws logs create-log-group --log-group-name /ecs/frontend-service || true
 
     # 8. Render the new cryptographic ECR Image Tags into the Backend definition template
     - name: Render Backend Task Definition
